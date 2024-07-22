@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Random Walk</title>
+    <style>
+        #canvas {
+            width: 1600px;
+            height: 1050px;
+            border: 3px solid rgb(32, 136, 0);  /* These are the dimentions of the canvas */
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="1600" height="1050"></canvas>  
+    <script src="https://cdn.jsdelivr.net/npm/d3-quadtree@3"></script>
+    <script>
+
+/* MIT License
+
+Copyright (c) 2024 CristalMediumBlue
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+ */
+
+
+        const canvas = document.getElementById('canvas');
+        const canvasWidth = canvas.width;
+        const canvasWidthSquare = canvasWidth * canvasWidth;
+        const canvasHeight = canvas.height;
+        const ctx = canvas.getContext('2d');
+        let time = 0;
+        const numberOfNewParticles = 10000; // This is the number of particles to add to the simulation
+        const particleRadius = 3; // This is the radius of the particles. Only relevant for drawing
+        const particleColor = 'rgb(0, 0, 0, 0.25)';
+        const searchRadius = 15;  // This is the radius of the search area for the nearest neighbors
+
+        let path = []; // This is the path of the first particle (the red one)
+        
+        // Create an array of brownian particles with random positions
+        const brownianParticles = Array(numberOfNewParticles).fill().map(() => ({
+            x: Math.random() * canvasWidth,
+            y: Math.random() * canvasHeight,
+            size: particleRadius,
+            color: particleColor,
+            first: false,
+            }));
+
+        // add one first particle color red. 
+        brownianParticles[0].color = 'rgb(255, 0, 0)';
+        brownianParticles[0].first = true;
+        brownianParticles[0].size = 10;
+
+        // Add the first particle to the path
+        path.push({x: brownianParticles[0].x, y: brownianParticles[0].y});
+
+        // Create a quadtree to store the brownian particles
+        let quadtreeBrownianParticles = d3.quadtree()
+            .extent([[0, 0], [canvasWidth, canvasHeight]])
+            .x(d => d.x)
+            .y(d => d.y)
+            .addAll(brownianParticles);
+
+
+        // Function to find nearby brownian particles
+        function findNearbyBrownianParticles(particle, threshold) {
+            let thresholdSquared = threshold * threshold;
+            let nearbyBrownianParticles = [];
+
+            const minX = particle.x - threshold;
+            const maxX = particle.x + threshold;
+            const minY = particle.y - threshold;
+            const maxY = particle.y + threshold;   
+            
+            quadtreeBrownianParticles.visit((node, x1, y1, x2, y2) => { 
+                if (!node.length) { 
+                        const d = node.data; 
+                        if (d === particle)  return; 
+                        const dx = particle.x - d.x;
+                        const dy = particle.y - d.y;
+                        const distanceSquared = dx * dx + dy * dy
+                        if (distanceSquared < thresholdSquared) {
+                            nearbyBrownianParticles.push(d); 
+                        }
+                } 
+                return x1 > maxX || x2 < minX || y1 > maxY || y2 < minY;
+            });
+            return nearbyBrownianParticles 
+            }
+
+        // Function to update the position of a particle based on diffusion
+        function updatePositionBasedOnDiffusion(particle){
+
+                //let's define the center of the canvas
+                let centerX = canvasWidth / 2;
+                let centerY = canvasHeight / 2;
+
+                //let's define the squared distance from the center of the canvas to the particle
+                let distanceSquared = (particle.x - centerX) * (particle.x - centerX) + (particle.y - centerY) * (particle.y - centerY);
+                let distance = Math.sqrt(distanceSquared);
+                let sd =200;
+                let A =5;//this is the amplitude of the sine wave
+                let f = 0.00004;// this is the frequency of the sine wave
+
+
+                let normalDiffusionCoef = 0.05*distance-13; // This is a cone
+                //let normalDiffusionCoef = -20000 * (Math.exp(-distanceSquared / (2 * sd * sd))) / (2 * Math.PI * sd)+18; // This is an upside-down gaussian bell curve
+                //let normalDiffusionCoef = A * Math.sin(f * distanceSquared)-8
+
+
+                // Update particle position with wrapping
+                particle.x = (particle.x + normalDiffusionCoef * (Math.random() - 0.5) + canvasWidth) % canvasWidth;
+                particle.y = (particle.y + normalDiffusionCoef * (Math.random() - 0.5) + canvasHeight) % canvasHeight;
+    
+        }
+        
+        function updatePositionBasedOnNearestNeighbors(particle, nearbyBrownianParticles) {
+
+            let numberOfNearbyBrownianParticles = nearbyBrownianParticles.length;
+
+
+            //let normalDiffusionCoef = 500/(numberOfNearbyBrownianParticles+10)+5;
+            let normalDiffusionCoef = (numberOfNearbyBrownianParticles - 20) ;
+        
+
+
+            // Update particle position with wrapping
+            particle.x = (particle.x + normalDiffusionCoef * (Math.random() - 0.5) + canvasWidth) % canvasWidth;
+            particle.y = (particle.y + normalDiffusionCoef * (Math.random() - 0.5) + canvasHeight) % canvasHeight;
+
+        }
+
+        // Main function to update the canvas
+        function updateCanvas() {
+            
+
+
+            for (let i = 0; i < brownianParticles.length; i++) {
+                const particle = brownianParticles[i];
+                //const nearbyBrownianParticles = findNearbyBrownianParticles(particle, searchRadius);
+                updatePositionBasedOnDiffusion(particle);
+                //updatePositionBasedOnNearestNeighbors(particle, nearbyBrownianParticles);
+            }
+            quadtreeBrownianParticles = d3.quadtree()
+                .x(d => d.x)
+                .y(d => d.y)
+                .addAll(brownianParticles);
+
+            // Update the path of the first particle by adding the new position
+            path.push({x: brownianParticles[0].x, y: brownianParticles[0].y});
+            if (time % 50 === 0) {
+                ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+                drawPath();
+                drawAllPoints();
+            }
+            
+           
+            time++;
+        }
+        
+        function addNewBrownianParticles(x, y, count, lastSegment) {
+            for (let i = 0; i < count; i++) {
+                brownianParticles.push({
+                    x: x,
+                    y: y,
+                    size: particleRadius,
+                    color: particleColor,
+                });
+            }
+        }
+        function drawPath() {
+            ctx.beginPath();
+            // Calculate the starting index for the last N segments
+            let startIndex = Math.max(path.length - 3000, 1); // Ensure we start at least from the first element
+        
+            // Move to the starting point of the last N segments
+            ctx.moveTo(path[startIndex - 1].x, path[startIndex - 1].y);
+        
+            for (let i = startIndex; i < path.length; i++) {
+                // Calculate the distance between the current point and the previous point
+                let dx = path[i].x - path[i-1].x;
+                let dy = path[i].y - path[i-1].y;
+                let distanceSquared = dx * dx + dy * dy;
+        
+                let thresholdSquared = canvasWidthSquare / 4;
+        
+                if (distanceSquared < thresholdSquared) {
+                    ctx.lineTo(path[i].x, path[i].y);
+                } else {
+                    // Move to the next point without drawing a line
+                    ctx.moveTo(path[i].x, path[i].y);
+                }
+            }
+            // color of the path depends on the length of the last segment
+            ctx.strokeStyle = 'rgb(0, 0, 255)'; // Path color
+            ctx.stroke();
+        }
+  
+        
+        function drawAllPoints() {
+            brownianParticles.forEach(drawPoint);
+            drawPoint(brownianParticles[0]);
+            drawSearchRadius(brownianParticles[0]);
+        }
+
+        function drawSearchRadius(particle) {
+            ctx.beginPath();
+            ctx.arc(particle.x, particle.y, searchRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = 'rgb(0, 0, 0)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+        }
+        
+
+        function drawPoint(point) {
+            ctx.fillStyle = point.color;
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, point.size, 0, 2 * Math.PI); // point.size represents the radius of the point
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        setInterval(updateCanvas, 0);
+
+ 
+    </script>
+</body>
+</html>
