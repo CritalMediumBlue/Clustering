@@ -163,7 +163,7 @@ SOFTWARE.
 
             // Update the path of the first particle by adding the new position
             path.push({x: brownianParticles[0].x, y: brownianParticles[0].y});
-            if (time % 50 === 0) {
+            if (time % 50 === 0) {  // We don't want to draw the path and the particles at every iteration. Every 50 iterations is enough
                 ctx.clearRect(0, 0, canvasWidth, canvasHeight);
                 drawPath();
                 drawAllPoints();
@@ -173,6 +173,7 @@ SOFTWARE.
             time++;
         }
         
+        // helper function in case we want to add new particles
         function addNewBrownianParticles(x, y, count, lastSegment) {
             for (let i = 0; i < count; i++) {
                 brownianParticles.push({
